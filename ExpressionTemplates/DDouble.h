@@ -1,26 +1,46 @@
 #pragma once
 
+#include "DiffMode.h"
 #include "Expression.h"
-#include <concepts>
-#include <type_traits>
 
-template<typename T>
-concept ExpressionIsBase = std::is_base_of_v<Expression<T>, T>;
+template<DiffMode mode> struct DDouble;
 
-struct DDouble : public Expression<DDouble>
+template<>
+struct DDouble<PRIMAL> : public Expression<DDouble<PRIMAL>>
 {
+	static constexpr DiffMode DMode = PRIMAL;
 	double _value;
 
 	constexpr DDouble(double const value) : _value(value)
 	{}
 
-	template<ExpressionIsBase T>
-	DDouble(T const &rhs) : _value(rhs.apply())
+  template<typename T>
+	DDouble(Expression<T> const &rhs) : _value(rhs.primal())
 	{}
 
-	auto &primitive() const
+	auto primal_impl() const
+	{ return _value; }
+};
+
+template<>
+struct DDouble<TANGENT> : public Expression<DDouble<TANGENT>>
+{
+	static constexpr DiffMode DMode = TANGENT;
+	double _value;
+	double _sensitivity;
+
+	constexpr DDouble(double const value, double const sens) : _value(value)
+                                                           , _sensitivity(sens)
+	{}
+
+  template<typename T>
+	DDouble(Expression<T> const &rhs) : _value(rhs.primal())
+                                    , _sensitivity(rhs.sensitivity())
+	{}
+
+	auto primal_impl() const
 	{ return _value; }
 
-	auto &apply_impl() const
-	{ return primitive(); }
+	auto sensitivity_impl() const
+	{ return _sensitivity; }
 };
