@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DiffConcepts.h"
 #include "DiffMode.h"
 #include "Expression.h"
 
@@ -14,7 +15,8 @@ struct DDouble<PRIMAL> : public Expression
 	constexpr DDouble(double const value) : _value(value)
 	{}
 
-	DDouble(auto const &rhs) : _value(rhs.primal())
+  template<IsExpression T>
+	DDouble(T const &rhs) : _value(rhs.primal())
 	{}
 
 	auto primal_impl() const
@@ -32,8 +34,9 @@ struct DDouble<TANGENT> : public Expression
                                                            , _sensitivity(sens)
 	{}
 
-	DDouble(auto const &rhs) : _value(rhs.primal())
-                           , _sensitivity(rhs.sensitivity())
+  template<IsExpression T>
+	DDouble(T const &rhs) : _value(rhs.primal())
+                        , _sensitivity(rhs.sensitivity())
 	{}
 
 	auto primal_impl() const

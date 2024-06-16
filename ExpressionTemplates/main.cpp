@@ -1,7 +1,10 @@
 #include "DDouble.h"
+#include "DiffMode.h"
 #include "Operators.h"
 
 #include<iostream>
+
+struct Tmp {};
 
 int main()
 {
@@ -14,8 +17,6 @@ int main()
   // auto t = (x/x1);
 
 	DDouble<TANGENT> t = k+sin((z+y)/(x+x1));
-
-
 
 	std::cout << t.primal() 
   << " " << t.sensitivity()  
