@@ -6,7 +6,7 @@
 template<DiffMode mode> struct DDouble;
 
 template<>
-struct DDouble<PRIMAL> : public Expression<DDouble<PRIMAL>>
+struct DDouble<PRIMAL> : public Expression
 {
 	static constexpr DiffMode DMode = PRIMAL;
 	double _value;
@@ -14,8 +14,7 @@ struct DDouble<PRIMAL> : public Expression<DDouble<PRIMAL>>
 	constexpr DDouble(double const value) : _value(value)
 	{}
 
-  template<typename T>
-	DDouble(Expression<T> const &rhs) : _value(rhs.primal())
+	DDouble(auto const &rhs) : _value(rhs.primal())
 	{}
 
 	auto primal_impl() const
@@ -23,7 +22,7 @@ struct DDouble<PRIMAL> : public Expression<DDouble<PRIMAL>>
 };
 
 template<>
-struct DDouble<TANGENT> : public Expression<DDouble<TANGENT>>
+struct DDouble<TANGENT> : public Expression
 {
 	static constexpr DiffMode DMode = TANGENT;
 	double _value;
@@ -33,9 +32,8 @@ struct DDouble<TANGENT> : public Expression<DDouble<TANGENT>>
                                                            , _sensitivity(sens)
 	{}
 
-  template<typename T>
-	DDouble(Expression<T> const &rhs) : _value(rhs.primal())
-                                    , _sensitivity(rhs.sensitivity())
+	DDouble(auto const &rhs) : _value(rhs.primal())
+                           , _sensitivity(rhs.sensitivity())
 	{}
 
 	auto primal_impl() const

@@ -49,7 +49,7 @@ struct Divide
 };
 
 template<typename T1, typename Op, typename T2>
-struct BinaryOp : public Expression<BinaryOp<T1, Op, T2>>
+struct BinaryOp : public Expression
 {
   T1 const &_t1;
   T2 const &_t2;
@@ -80,7 +80,7 @@ struct Sin
 
 
 template<typename Op, typename T>
-struct UnaryOp : Expression<UnaryOp<Op, T>>
+struct UnaryOp : Expression
 {
   T const &_t;
   static constexpr auto DMode = T::DMode;
