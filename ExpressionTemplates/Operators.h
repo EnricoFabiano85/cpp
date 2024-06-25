@@ -30,6 +30,7 @@ auto operator/(T1 const &t1, T2 const &t2)
   { return BinaryOp<T1, Divide, T2>(const_cast<T1&>(t1), const_cast<T2&>(t2)); }
 }
 
+
 template<typename T>
 auto sin(T const &t)
 { 

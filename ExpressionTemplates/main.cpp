@@ -30,7 +30,7 @@ int main()
 
   std::cout << "lTan " << lTan.sensitivity() << std::endl;
 
-  //-------------- ADJOINT
+  // //-------------- ADJOINT
   double constexpr seed = 1;
 
 
