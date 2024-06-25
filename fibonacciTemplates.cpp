@@ -23,7 +23,7 @@ struct Fibonacci2<1> {static int constexpr value = 1;};
 template<>
 struct Fibonacci2<0> {static int constexpr value = 0;};
 
-// static_assert(Fibonacci<11>::value == 89);
+static_assert(Fibonacci<11>::value == 89);
 static_assert(Fibonacci2<10>::value == 55);
 
 int main()
