@@ -2,7 +2,6 @@
 
 #include "DiffMode.h"
 #include "Expression.h"
-#include <type_traits>
 
 #include <type_traits>
 
