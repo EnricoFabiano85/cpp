@@ -33,13 +33,11 @@ int main()
   // //-------------- ADJOINT
   double constexpr seed = 1;
 
-
   DDouble<ADJOINT> x{2, 0};
   DDouble<ADJOINT> x1{1, 0};
   DDouble<ADJOINT> y{5, 0};
   DDouble<ADJOINT> z{10, 0};
   DDouble<ADJOINT> k{42, 0};
-
   {
     auto const sum1 = x+x1;
     auto const sum2 = z+y;
