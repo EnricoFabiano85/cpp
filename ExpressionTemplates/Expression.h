@@ -1,8 +1,12 @@
 #pragma once
 
+#include <utility>
+
 struct Expression
 {
-  auto primal(this auto &&self) { return self.primal_impl(); }
-  auto sensitivity(this auto &&self) { return self.sensitivity_impl(); }
-  auto adjoint(this auto &&self) -> decltype(auto) { return self.adjoint_impl(); }
+  decltype(auto) primal(this auto &&self) 
+  { return self.primal_impl(); }
+
+  decltype(auto) sensitivity(this auto &&self) 
+  { return std::forward<decltype(self)>(self).sensitivity_impl();  }
 };
