@@ -26,9 +26,9 @@ class LockFreeQueue
 public:
   LockFreeQueue() = default;
 
-  void push(T &&element)
+  void push(auto &&...args)
   {
-    _data[getArrayIndex(_write)] = std::move(element);
+    _data[getArrayIndex(_write)] = T(std::forward<decltype(args)>(args)...);
     ++_write;
     _size.fetch_add(1, std::memory_order_release);
   }
