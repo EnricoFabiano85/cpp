@@ -20,20 +20,21 @@ namespace LFQueueConstraints
   concept DefaultConstructible = std::is_default_constructible_v<T>;
 }
 
-template<LFQueueConstraints::DefaultConstructible T, std::size_t N> requires LFQueueConstraints::PowerTwo<N>
+template<typename T, std::size_t N> 
+requires (LFQueueConstraints::DefaultConstructible<T> && LFQueueConstraints::PowerTwo<N>)
 class LockFreeQueue 
 {
 public:
   LockFreeQueue() = default;
 
-  void push(T &&element)
+  void push(T &&e) noexcept
   {
-    _data[getArrayIndex(_write)] = std::move(element);
+    _data[getArrayIndex(_write)] = std::move(e);
     ++_write;
     _size.fetch_add(1, std::memory_order_release);
   }
 
-  auto pop()
+  auto pop() noexcept
   {
     if (_size != 0)
     {
@@ -48,14 +49,14 @@ public:
     }
   }
 
-  bool empty() const
+  bool inline empty() const noexcept
   {
     return (_size==0);
   }
 
 private:
 
-  std::size_t getArrayIndex(std::size_t const index) const
+  std::size_t inline getArrayIndex(std::size_t const index) const noexcept
   { 
     // https://stackoverflow.com/a/19383296
     return (index & (N - 1)); 
