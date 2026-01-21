@@ -3,23 +3,23 @@ Inspired from https://www.linkedin.com/posts/heriklima_cppperformance-avx2-simd-
 Compile: clang++ -std=c++23 -O3 -mavx2 (-DINTRINSIC) SimdString.cpp
 */
 
+#include <chrono>
 #include <cstddef>
 #include <print>
-#include <chrono>
 #include <string>
 #include <string_view>
-#include <immintrin.h>
 
 #ifndef INTRINSIC
 #include <experimental/simd>
 namespace stdx = std::experimental;
+#else
+#include <immintrin.h>
 #endif
 
 int constexpr size = 1 << 20;
 char constexpr target = 'z';
 
 auto textA = std::string(size, 'a');
-auto textB = std::string(size, 'b');
 
 auto constexpr linearSearch(std::string_view string, char target) -> size_t
 {
@@ -39,10 +39,11 @@ auto simdSearch(std::string_view string, char target) -> size_t
 
 #ifndef INTRINSIC
 
-  auto const simdTarget = stdx::native_simd<char>{'z'};
-  for (; i+32 <= n; i += 32)
+  using C = stdx::native_simd<char>;
+  auto const simdTarget = C{'z'};
+  for (; i+C::size() <= n; i += C::size())
   {
-    auto const mySimdChunk = stdx::native_simd<char>{string.data()+i, stdx::element_aligned};
+    auto const mySimdChunk = C{string.data()+i, stdx::element_aligned};
     auto const mask = (simdTarget == mySimdChunk);
 
     if (stdx::any_of(mask))
@@ -50,6 +51,7 @@ auto simdSearch(std::string_view string, char target) -> size_t
       return stdx::find_first_set(mask)+i;
     }
   }
+
 #else
 
   __m256i const vt = _mm256_set1_epi8(target);
@@ -65,6 +67,7 @@ auto simdSearch(std::string_view string, char target) -> size_t
       return i + static_cast<size_t>(index);
     }
   }
+
 #endif
 
   for(; i < n; ++i)
@@ -90,9 +93,7 @@ auto measure(auto f)
 
 int main()
 {
-
   textA[size - 1] = 'z';
-  textB[size - 1] = 'z';
 
   for (auto i = 0; i <  5; ++i)
   {
