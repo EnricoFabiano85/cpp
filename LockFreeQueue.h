@@ -2,6 +2,7 @@
 #include <array>
 #include <atomic>
 #include <bit>
+#include <concepts>
 #include <optional>
 
 /*
@@ -10,18 +11,12 @@ Circular array implementation of single-producer, single-consumer lock-free queu
 
 namespace LFQueueConstraints
 {
-  // template<std::size_t N>
-  // concept PowerTwo = ((N & (N - 1)) == 0);
-
   template<std::size_t N>
   concept PowerTwo = std::has_single_bit(N);
-
-  template<typename T>
-  concept DefaultConstructible = std::is_default_constructible_v<T>;
 }
 
 template<typename T, std::size_t N> 
-requires (LFQueueConstraints::DefaultConstructible<T> && LFQueueConstraints::PowerTwo<N>)
+requires (std::default_initializable<T> && std::movable<T> && LFQueueConstraints::PowerTwo<N>)
 class LockFreeQueue 
 {
 public:
@@ -29,29 +24,37 @@ public:
 
   void push(T &&e) noexcept
   {
-    _data[getArrayIndex(_write)] = std::move(e);
-    ++_write;
-    _size.fetch_add(1, std::memory_order_release);
+    auto const write = _write.load(std::memory_order_relaxed);
+
+    while (write == _read.load(std::memory_order_acquire) + N) std::this_thread::yield(); //__mm_pause();
+
+    _data[getArrayIndex(write)] = std::move(e);
+
+    _write.store(write + 1, std::memory_order_release);
   }
 
-  auto pop() noexcept
+  std::optional<T> pop() noexcept
   {
-    if (_size != 0)
+    auto res = std::optional<T>{};
+
+    auto const read = _read.load(std::memory_order_relaxed);
+    auto const write = _write.load(std::memory_order_acquire);
+
+    if (write != read)
     {
-      auto res = std::move(_data[getArrayIndex(_read)]);
-      ++_read;
-      _size.fetch_sub(1, std::memory_order_release);
-      return std::optional{res};
+      res = std::move(_data[getArrayIndex(read)]);
+      _read.store(read + 1, std::memory_order_release);
     }
-    else 
-    {
-      return std::optional<T>(std::nullopt); 
-    }
+
+    return res;
   }
 
-  bool inline empty() const noexcept
+  size_t size() const noexcept 
   {
-    return (_size==0);
+    auto const w = _write.load(std::memory_order_relaxed);
+    auto const r = _read.load(std::memory_order_relaxed);
+    
+    return w - r; 
   }
 
 private:
@@ -62,8 +65,7 @@ private:
     return (index & (N - 1)); 
   }
 
-  std::size_t _read{};
-  std::size_t _write{};
-  std::atomic<std::size_t> _size{};
+  alignas(64) std::atomic<std::size_t> _read{};
+  alignas(64) std::atomic<std::size_t> _write{};
   std::array<T, N> _data{};
 };
