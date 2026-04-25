@@ -10,82 +10,138 @@ Conclusions:
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <concepts>
 #include <cstddef>
+#include <cstdint>
+#include <format>
 #include <experimental/simd> // mostly for immintrin.h
+#include <numeric>
 #include <print>
 #include <random>
 #include <vector>
 
-int main()
+struct Benchmark
 {
-  auto constexpr vectorSize = 100000000;
-  auto const data = std::vector<int>(vectorSize, 1);
-  
-  {
-    auto sum = 0;
+  std::uint64_t const min;
+  double const mean;
+  std::uint64_t const median;
+  double const stdDev;
+  std::uint64_t const p90;
+  std::uint64_t const p99;
+  std::uint64_t const max;
+};
 
+template <>
+struct std::formatter<Benchmark> 
+{
+  constexpr auto parse(std::format_parse_context& ctx) {
+      return ctx.begin();
+  }
+
+  auto format(const Benchmark &b, std::format_context& ctx) const {
+      return std::format_to(ctx.out(), "====== Benchmark results ======\n"
+      "min {}ms\n"
+      "mean {}ms\n"
+      "median {}ms\n"
+      "std dev {}ms\n"
+      "p90 {}ms\n"
+      "p99 {}ms\n"
+      "max {}ms\n"
+      "===============================", b.min, b.mean, b.median, b.stdDev, b.p90, b.p99, b.max);
+  }
+};
+
+inline void doNotOptimize(auto const &value)
+{ asm volatile("" : : "r,m"(value) : "memory"); }
+
+auto measure(int nIter, std::invocable auto f) -> Benchmark
+{
+  auto timingResults = std::vector<std::uint64_t>();
+  timingResults.reserve(nIter);
+
+  for (int iter = 0; iter != nIter; ++iter)
+  {
     auto const start = std::chrono::high_resolution_clock::now();
 
-    for (auto const &e : data) sum += e;
+    auto value = f();
+    doNotOptimize(value);
 
     auto const end = std::chrono::high_resolution_clock::now();
     auto const elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
+    timingResults.push_back(elapsedTime);
+  }
 
-    assert(sum == vectorSize);
-    std::println("Range-based for walltime is {}ms", elapsedTime);
+  std::ranges::sort(timingResults);
+  double const mean = std::accumulate(timingResults.begin(), timingResults.end(), 0.)/nIter;
+  
+  double const sqSum = std::accumulate(timingResults.begin(), timingResults.end(), 0., 
+      [mean](double acc, double x) { return acc + (x - mean) * (x - mean); });
+  double const stdDev = std::sqrt(sqSum / nIter);
+
+  auto getPercentile = [&](double p) {
+      std::size_t const idx = static_cast<std::size_t>(std::ceil((p / 100.0) * nIter)) - 1;
+      return timingResults[std::min(idx, std::size_t(nIter) - 1)];
+  };
+
+  return {timingResults.front(), mean, getPercentile(50), stdDev, getPercentile(90), getPercentile(99), timingResults.back()};
+}
+
+int main()
+{
+  auto constexpr vectorSize = 100'000'000;
+  auto const data = std::vector<int>(vectorSize, 1);
+  auto const nIter = 10;
+  
+  {
+    auto const b = measure(nIter, [&](){
+      decltype(data)::value_type sum = 0;
+      for (auto const &e : data) sum += e;
+      return sum;
+    });
+    std::println("Range-based timing results:");
+    std::println("{}\n\n\n", b);
   }
 
   auto indices = std::vector<std::size_t>(vectorSize);
   std::ranges::iota(indices,0);
 
   {
-    auto sum = 0;
-
-    auto const start = std::chrono::high_resolution_clock::now();
-
-    for (auto i = 0; i < vectorSize; i++) sum += data[indices[i]];
-
-    auto const end = std::chrono::high_resolution_clock::now();
-    auto const elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
-
-    assert(sum == vectorSize);
-    std::println("Index indirection walltime is {}ms", elapsedTime);
+    auto const b = measure(nIter, [&](){
+      decltype(data)::value_type sum = 0;
+      for (auto i = 0; i != vectorSize; ++i) sum += data[indices[i]];
+      return sum;
+    });
+    std::println("Index indirection timing results");
+    std::println("{}\n\n\n", b);
   }
 
   std::ranges::shuffle(indices, std::mt19937{std::random_device{}()});
 
   {
-    auto sum  = 0;
-
-    auto const start = std::chrono::high_resolution_clock::now();
-
-    for (auto i = 0; i < vectorSize; i++) sum += data[indices[i]];
-
-    auto const end = std::chrono::high_resolution_clock::now();
-    auto const elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
-
-    assert(sum == vectorSize);
-    std::println("Shuffled indices (no prefetch) walltime is {}ms", elapsedTime);
+    auto const b = measure(nIter, [&](){
+      decltype(data)::value_type sum = 0;
+      for (auto i = 0; i != vectorSize; ++i) sum += data[indices[i]];
+      return sum;
+    });
+    std::println("Shuffled indices timing results (no prefetch)");
+    std::println("{}\n\n\n", b);
   }
 
   {
     for (auto prefetchDistance : std::array{1, 10, 50, 90, 100, 200, 300, 400, 500, 1000, 10000})
-    {  
-      auto sum = 0;
+    { 
+      auto const b = measure(nIter, [&](){
+        decltype(data)::value_type sum = 0;
+        
+        for (auto i = 0; i != vectorSize; ++i) 
+        {
+          __builtin_prefetch(data.data()+indices[i+prefetchDistance]);
+          sum += data[indices[i]];
+        }
+        return sum;
+      });
 
-      auto const startPrefetch = std::chrono::high_resolution_clock::now();
-
-      for (auto i = 0; i < vectorSize; i++) 
-      {
-        __builtin_prefetch(data.data()+indices[i+prefetchDistance]);
-        sum += data[indices[i]];
-      }
-
-      auto const endPrefetch = std::chrono::high_resolution_clock::now();
-      auto const elapsedPrefetch = std::chrono::duration_cast<std::chrono::milliseconds>(endPrefetch-startPrefetch).count();
-
-      assert(sum == vectorSize);
-      std::println("Prefetch Distance {} walltime is {}ms", prefetchDistance, elapsedPrefetch);
+      std::println("Prefetch Distance {} walltime is {}ms", prefetchDistance, b.mean);
     }
   }
 
@@ -93,52 +149,50 @@ int main()
   auto constexpr lanes = std::experimental::native_simd<int>::size();
   
   {
-    auto const startSimd = std::chrono::high_resolution_clock::now();
+    auto const b = measure(nIter, [&](){
+        auto vecSum = _mm512_setzero_si512();
 
-    auto vecSum = _mm512_setzero_si512();
+        std::size_t i = 0;
+        for (; i + lanes <= vectorSize; i+=lanes)
+        {
+          auto const localIndices = _mm512_loadu_si512((__m512i*)&indices[i]);
+          auto const vals = _mm512_i32gather_epi32(localIndices, data.data(), sizeof(decltype(data)::value_type));
+          vecSum = _mm512_add_epi64(vecSum, vals);
+        }
 
-    std::size_t i = 0;
-    for (; i + lanes <= vectorSize; i+=lanes)
-    {
-      auto const localIndices = _mm512_loadu_si512((__m512i*)&indices[i]);
-      auto const vals = _mm512_i32gather_epi32(localIndices, data.data(), sizeof(decltype(data)::value_type));
-      vecSum = _mm512_add_epi32(vecSum, vals);
-    }
+        auto const sum = _mm512_reduce_add_epi64(vecSum);
 
-    auto const sum = _mm512_reduce_add_epi32(vecSum);
+        return sum;
+      });
 
-    auto const endSimd = std::chrono::high_resolution_clock::now();
-    auto const elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endSimd-startSimd).count();
-
-    assert(sum == vectorSize);
-    std::println("SIMD gather walltime is {}ms", elapsedTime);
+    std::println("SIMD gather timing results");
+    std::println("{}", b);
   }
 
   {
     for (auto prefetchDistance : std::array{1, 10, 50, 90, 100, 200, 300, 400, 500, 1000, 10000})
     {
-      auto const startSimdPrefetch = std::chrono::high_resolution_clock::now();
+      auto const b = measure(nIter, [&](){
 
-      auto vecSum = _mm512_setzero_si512();
+        auto vecSum = _mm512_setzero_si512();
 
-      std::size_t i = 0;
-      for (; i + lanes <= vectorSize; i+=lanes)
-      {
-        for (auto iP = i+prefetchDistance; iP < std::min<std::size_t>(i+prefetchDistance+lanes, vectorSize); ++iP )
-          __builtin_prefetch(data.data()+indices[iP]);
+        std::size_t i = 0;
+        for (; i + lanes <= vectorSize; i+=lanes)
+        {
+          for (auto iP = i+prefetchDistance; iP < std::min<std::size_t>(i+prefetchDistance+lanes, vectorSize); ++iP )
+            __builtin_prefetch(data.data()+indices[iP]);
 
-        auto const localIndices = _mm512_loadu_si512((__m512i*)&indices[i]);
-        auto const vals = _mm512_i32gather_epi32(localIndices, data.data(), sizeof(decltype(data)::value_type));
-        vecSum = _mm512_add_epi32(vecSum, vals);
-      }
+          auto const localIndices = _mm512_loadu_si512((__m512i*)&indices[i]);
+          auto const vals = _mm512_i32gather_epi32(localIndices, data.data(), sizeof(decltype(data)::value_type));
+          vecSum = _mm512_add_epi32(vecSum, vals);
+        }
 
-      auto const sum = _mm512_reduce_add_epi32(vecSum);
+        auto const sum = _mm512_reduce_add_epi32(vecSum);
 
-      auto const endSimdPrefetch = std::chrono::high_resolution_clock::now();
-      auto const elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endSimdPrefetch-startSimdPrefetch).count();
+        return sum;
+      });
 
-      assert(sum == vectorSize);
-      std::println("SIMD gather Prefetch Distance {} walltime is {}ms", prefetchDistance, elapsedTime);
+      std::println("SIMD gather Prefetch Distance {} walltime is {}", prefetchDistance, b.mean);
     }
   }
 #endif
